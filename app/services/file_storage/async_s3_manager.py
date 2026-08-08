@@ -4,6 +4,7 @@ from typing import Optional
 import aioboto3
 import cv2
 import numpy as np
+from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 from pydantic import BaseModel
 
@@ -39,6 +40,7 @@ class S3Manager:
             aws_access_key_id=self.config.aws_access_key_id,
             aws_secret_access_key=self.config.aws_secret_access_key,
             endpoint_url=self.endpoint_url,
+            config=BotoConfig(s3={"addressing_style": "path"}),
         )
 
     async def download_file(self, key: str, download_path: str):

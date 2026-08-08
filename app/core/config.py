@@ -14,6 +14,29 @@ class S3Config(BaseSettings):
     server_name: str = os.environ.get("SERVER_NAME")
 
 
+# Active storage: "minio" | "yandex". Both key sets stay in .env; switch via
+# STORAGE_PROVIDER. Must match APP_CONFIG__STORAGE_PROVIDER in c_control.
+STORAGE_PROVIDER = os.environ.get("STORAGE_PROVIDER", "minio").lower()
+
+
+def _active_s3_config() -> S3Config:
+    if STORAGE_PROVIDER == "minio":
+        return S3Config(
+            aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("MINIO_SECRET_ACCESS_KEY"),
+            endpoint_url=os.environ.get("MINIO_ENDPOINT_URL"),
+            bucket_name=os.environ.get("MINIO_BUCKET_NAME"),
+            server_name=os.environ.get("SERVER_NAME"),
+        )
+    return S3Config(
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_"),
+        endpoint_url=os.environ.get("ENDPOINT_URL"),
+        bucket_name=os.environ.get("BUCKET_NAME"),
+        server_name=os.environ.get("SERVER_NAME"),
+    )
+
+
 class Redis(BaseSettings):
     host: str = os.environ.get("REDIS_HOST")
     port: int = os.environ.get("REDIS_PORT")
@@ -27,8 +50,8 @@ class Settings(BaseSettings):
     MODEL_NAME: str = "buffalo_l"
     MODEL_PATH: str = os.environ.get("MODEL_PATH")
     WORKER_POOL_SIZE: int = 1
-    s3_config: S3Config = S3Config()  # Указание типа атрибута.
-    redis_config: Redis = Redis()  # Указание типа атрибута.
+    s3_config: S3Config = _active_s3_config()
+    redis_config: Redis = Redis()
 
 
 settings = Settings()
