@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import Optional
 
 import aioboto3
@@ -99,23 +100,27 @@ class S3Manager:
             logger.error(f"Ошибка при загрузке изображения: {e}")
             return S3Error
 
-    async def download_image(self, key: str) -> Optional[np.ndarray]:
-        """Скачать изображение из S3 и декодировать его."""
-        try:
-            async with await self._get_client() as s3_client:
-                response = await s3_client.get_object(Bucket=self.bucket_name, Key=key)
-                async with response["Body"] as stream:
-                    image_bytes = await stream.read()
-                image_array = np.frombuffer(image_bytes, np.uint8)
-                image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-                if image is None:
-                    logger.error(f"Не удалось декодировать изображение: {key}")
-                    raise ImageNoDecodeError
-                return image
-        except Exception as e:
-            logger.error(f"Ошибка загрузки изображения {key}: {e}")
-            raise S3Error
+    async def download_image(self, key: str, retries: int = 4, delay: float = 0.5) -> Optional[np.ndarray]:
+        last_error = None
+        for attempt in range(retries):
+            try:
+                async with await self._get_client() as s3_client:
+                    response = await s3_client.get_object(Bucket=self.bucket_name, Key=key)
+                    async with response["Body"] as stream:
+                        image_bytes = await stream.read()
+                    image_array = np.frombuffer(image_bytes, np.uint8)
+                    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+                    if image is None:
+                        raise ImageNoDecodeError
+                    return image
+            except ImageNoDecodeError:
+                raise
+            except Exception as e:
+                last_error = e
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+        logger.error("download_image failed for %s after %s tries: %s", key, retries, last_error)
+        raise S3Error
 
 
-# Инициализация менеджера S3
 s3_manager = S3Manager(config=S3Config(**settings.s3_config.dict()))
