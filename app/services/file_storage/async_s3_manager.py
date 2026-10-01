@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
+from fastapi import HTTPException
 from pydantic import BaseModel
 
 from core.exceptions import S3Error, ImageNoDecodeError
@@ -100,7 +101,7 @@ class S3Manager:
             logger.error(f"Ошибка при загрузке изображения: {e}")
             return S3Error
 
-    async def download_image(self, key: str, retries: int = 4, delay: float = 0.5) -> Optional[np.ndarray]:
+    async def download_image(self, key: str, retries: int = 5, delay: float = 0.5) -> Optional[np.ndarray]:
         last_error = None
         for attempt in range(retries):
             try:
@@ -113,12 +114,16 @@ class S3Manager:
                     if image is None:
                         raise ImageNoDecodeError
                     return image
-            except ImageNoDecodeError:
+            # ImageNoDecodeError — экземпляр HTTPException, а не класс: в
+            # `except ImageNoDecodeError` Python падал с TypeError на любой ошибке,
+            # и повтор при NoSuchKey не срабатывал ни разу.
+            except HTTPException:
                 raise
             except Exception as e:
                 last_error = e
                 if attempt < retries - 1:
-                    await asyncio.sleep(delay)
+                    # 0.5, 1, 2, 4 c — суммарно ~7.5 c на read-after-write
+                    await asyncio.sleep(delay * 2**attempt)
         logger.error("download_image failed for %s after %s tries: %s", key, retries, last_error)
         raise S3Error
 
